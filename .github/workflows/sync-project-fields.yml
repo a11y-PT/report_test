@@ -1,0 +1,156 @@
+name: Sync Project Fields
+
+on:
+  issues:
+    types: [opened, labeled]
+
+permissions:
+  contents: read
+  issues: write
+  repository-projects: write
+
+jobs:
+  sync-fields:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Process issue labels → project fields
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }} # ou GITHUB_TOKEN se funcionar
+          PROJECT_ID: PVT_xxx
+
+          # -------------------------
+          # FIELD IDs
+          # -------------------------
+          FIELD_10WEB: PVTSSF_aaa
+          FIELD_CONTEUDO: PVTSSF_bbb
+          FIELD_TRANSACAO: PVTSSF_ccc
+
+          # -------------------------
+          # OPTION IDs (10 WEB)
+          # -------------------------
+          OPT_10WEB_1: opt_aaa
+          OPT_10WEB_2: opt_bbb
+          OPT_10WEB_3: opt_ccc
+          OPT_10WEB_4: opt_ddd
+          OPT_10WEB_5: opt_eee
+          OPT_10WEB_6: opt_fff
+          OPT_10WEB_7: opt_ggg
+          OPT_10WEB_8: opt_hhh
+          OPT_10WEB_9: opt_iii
+          OPT_10WEB_10: opt_jjj
+
+          # -------------------------
+          # OPTION IDs (CONTEÚDO)
+          # -------------------------
+          OPT_CONT_1: opt_111
+          OPT_CONT_2: opt_222
+          OPT_CONT_3: opt_333
+          OPT_CONT_4: opt_444
+          OPT_CONT_5: opt_555
+
+          # -------------------------
+          # OPTION IDs (TRANSAÇÃO)
+          # -------------------------
+          OPT_TRANS_1: opt_x1
+          OPT_TRANS_2: opt_x2
+          OPT_TRANS_3: opt_x3
+          OPT_TRANS_4: opt_x4
+
+        run: |
+          echo "🔍 A ler labels..."
+
+          LABELS=$(jq -r '.issue.labels[].name' "$GITHUB_EVENT_PATH")
+          ISSUE_NODE_ID=$(jq -r '.issue.node_id' "$GITHUB_EVENT_PATH")
+
+          echo "$LABELS"
+
+          # -------------------------
+          # DETETAR FIELD
+          # -------------------------
+          FIELD_ID=""
+          OPTION_ID=""
+
+          if echo "$LABELS" | grep -q "chk 10 web"; then
+            FIELD_ID=$FIELD_10WEB
+            PREFIX="OPT_10WEB_"
+          fi
+
+          if echo "$LABELS" | grep -q "chk conteudo"; then
+            FIELD_ID=$FIELD_CONTEUDO
+            PREFIX="OPT_CONT_"
+          fi
+
+          if echo "$LABELS" | grep -q "chk transacao"; then
+            FIELD_ID=$FIELD_TRANSACAO
+            PREFIX="OPT_TRANS_"
+          fi
+
+          echo "📌 FIELD_ID: $FIELD_ID"
+
+          # -------------------------
+          # EXTRAIR NÚMERO DO R X.Y
+          # -------------------------
+          R_NUMBER=$(echo "$LABELS" | grep -oE 'R [0-9]+' | head -n1 | cut -d' ' -f2)
+
+          echo "🔢 R_NUMBER: $R_NUMBER"
+
+          if [ -z "$R_NUMBER" ]; then
+            echo "⚠️ Sem label R X — abortar"
+            exit 0
+          fi
+
+          # -------------------------
+          # RESOLVER OPTION DINAMICAMENTE
+          # -------------------------
+          VAR_NAME="${PREFIX}${R_NUMBER}"
+
+          OPTION_ID=$(printenv $VAR_NAME)
+
+          echo "🎯 OPTION_ID: $OPTION_ID"
+
+          if [ -z "$FIELD_ID" ] || [ -z "$OPTION_ID" ]; then
+            echo "⚠️ Mapping incompleto — abortar"
+            exit 0
+          fi
+
+          # -------------------------
+          # ADICIONAR AO PROJECT
+          # -------------------------
+          echo "➕ Adicionar ao project..."
+
+          ITEM_ID=$(gh api graphql -f query='
+            mutation($project:ID!, $content:ID!) {
+              addProjectV2ItemById(input:{
+                projectId:$project,
+                contentId:$content
+              }) {
+                item { id }
+              }
+            }' \
+            -f project=$PROJECT_ID \
+            -f content=$ISSUE_NODE_ID \
+            --jq '.data.addProjectV2ItemById.item.id')
+
+          echo "🧩 ITEM_ID: $ITEM_ID"
+
+          # -------------------------
+          # ATUALIZAR FIELD
+          # -------------------------
+          echo "✏️ Atualizar field..."
+
+          gh api graphql -f query='
+            mutation($project:ID!, $item:ID!, $field:ID!, $option: String!) {
+              updateProjectV2ItemFieldValue(input:{
+                projectId:$project,
+                itemId:$item,
+                fieldId:$field,
+                value:{ singleSelectOptionId:$option }
+              }) { clientMutationId }
+            }' \
+            -f project=$PROJECT_ID \
+            -f item=$ITEM_ID \
+            -f field=$FIELD_ID \
+            -f option=$OPTION_ID
+
+          echo "✅ Done"
