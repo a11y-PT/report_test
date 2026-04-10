@@ -14,53 +14,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
       - name: Sync labels → project fields
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
-
-          # -------------------------
-          # PROJECT
-          # -------------------------
-          PROJECT_ID: ${{ vars.PROJECT_ID }}
-
-          # -------------------------
-          # FIELDS
-          # -------------------------
-          FIELD_10WEB: ${{ vars.FIELD_10WEB }}
-          FIELD_CONTEUDO: ${{ vars.FIELD_CONTEUDO }}
-          FIELD_TRANSACAO: ${{ vars.FIELD_TRANSACAO }}
-
-          # -------------------------
-          # OPTIONS (10 WEB)
-          # -------------------------
-          OPT_10WEB_1: ${{ vars.OPT_10WEB_1 }}
-          OPT_10WEB_2: ${{ vars.OPT_10WEB_2 }}
-          OPT_10WEB_3: ${{ vars.OPT_10WEB_3 }}
-          OPT_10WEB_4: ${{ vars.OPT_10WEB_4 }}
-          OPT_10WEB_5: ${{ vars.OPT_10WEB_5 }}
-          OPT_10WEB_6: ${{ vars.OPT_10WEB_6 }}
-          OPT_10WEB_7: ${{ vars.OPT_10WEB_7 }}
-          OPT_10WEB_8: ${{ vars.OPT_10WEB_8 }}
-          OPT_10WEB_9: ${{ vars.OPT_10WEB_9 }}
-          OPT_10WEB_10: ${{ vars.OPT_10WEB_10 }}
-
-          # -------------------------
-          # OPTIONS (CONTEÚDO)
-          # -------------------------
-          OPT_CONT_1: ${{ vars.OPT_CONT_1 }}
-          OPT_CONT_2: ${{ vars.OPT_CONT_2 }}
-          OPT_CONT_3: ${{ vars.OPT_CONT_3 }}
-          OPT_CONT_4: ${{ vars.OPT_CONT_4 }}
-          OPT_CONT_5: ${{ vars.OPT_CONT_5 }}
-
-          # -------------------------
-          # OPTIONS (TRANSAÇÃO)
-          # -------------------------
-          OPT_TRANS_1: ${{ vars.OPT_TRANS_1 }}
-          OPT_TRANS_2: ${{ vars.OPT_TRANS_2 }}
-          OPT_TRANS_3: ${{ vars.OPT_TRANS_3 }}
-          OPT_TRANS_4: ${{ vars.OPT_TRANS_4 }}
-
+          PROJECT_ID: ${{ vars.PROJECT_ID }} # único valor que mantemos
         run: |
           echo "🔍 A ler labels..."
 
@@ -69,28 +29,17 @@ jobs:
 
           echo "$LABELS"
 
-          FIELD_ID=""
-          OPTION_ID=""
-
           # -------------------------
-          # DETETAR FIELD
+          # DETETAR CHECKLIST
           # -------------------------
-          if echo "$LABELS" | grep -q "chk 10 web"; then
-            FIELD_ID=$FIELD_10WEB
-            PREFIX="OPT_10WEB_"
-          fi
+          CHECK_KEY=$(echo "$LABELS" | grep -Eo 'chk [^ ]+( [^ ]+)?' | head -n1)
 
-          if echo "$LABELS" | grep -q "chk conteudo"; then
-            FIELD_ID=$FIELD_CONTEUDO
-            PREFIX="OPT_CONT_"
-          fi
+          echo "📌 CHECK_KEY: $CHECK_KEY"
 
-          if echo "$LABELS" | grep -q "chk transacao"; then
-            FIELD_ID=$FIELD_TRANSACAO
-            PREFIX="OPT_TRANS_"
+          if [ -z "$CHECK_KEY" ]; then
+            echo "⚠️ Sem checklist — abortar"
+            exit 0
           fi
-
-          echo "📌 FIELD_ID: $FIELD_ID"
 
           # -------------------------
           # EXTRAIR R
@@ -104,21 +53,80 @@ jobs:
             exit 0
           fi
 
-          VAR_NAME="${PREFIX}${R_NUMBER}"
-          OPTION_ID=$(printenv $VAR_NAME)
+          # -------------------------
+          # LER MAPPING
+          # -------------------------
+          FIELD_NAME=$(jq -r --arg key "$CHECK_KEY" '.[$key].field' .config/mapping.json)
 
+          OPTION_NAME=$(jq -r --arg key "$CHECK_KEY" --arg num "$R_NUMBER" \
+            '.[$key].options[$num]' .config/mapping.json)
+
+          echo "📌 FIELD_NAME: $FIELD_NAME"
+          echo "🎯 OPTION_NAME: $OPTION_NAME"
+
+          if [ "$FIELD_NAME" == "null" ] || [ "$OPTION_NAME" == "null" ]; then
+            echo "⚠️ Mapping não encontrado — abortar"
+            exit 0
+          fi
+
+          # -------------------------
+          # OBTER FIELDS DO PROJECT
+          # -------------------------
+          echo "📡 Obter fields do project..."
+
+          FIELDS_JSON=$(gh api graphql -f query='
+          query($project: ID!) {
+            node(id: $project) {
+              ... on ProjectV2 {
+                fields(first: 50) {
+                  nodes {
+                    ... on ProjectV2SingleSelectField {
+                      id
+                      name
+                      options {
+                        id
+                        name
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }' -f project=$PROJECT_ID)
+
+          # -------------------------
+          # RESOLVER FIELD_ID
+          # -------------------------
+          FIELD_ID=$(echo "$FIELDS_JSON" | jq -r --arg name "$FIELD_NAME" '
+            .data.node.fields.nodes[]
+            | select(.name == $name)
+            | .id
+          ')
+
+          # -------------------------
+          # RESOLVER OPTION_ID
+          # -------------------------
+          OPTION_ID=$(echo "$FIELDS_JSON" | jq -r \
+            --arg fname "$FIELD_NAME" \
+            --arg oname "$OPTION_NAME" '
+            .data.node.fields.nodes[]
+            | select(.name == $fname)
+            | .options[]
+            | select(.name == $oname)
+            | .id
+          ')
+
+          echo "🧩 FIELD_ID: $FIELD_ID"
           echo "🎯 OPTION_ID: $OPTION_ID"
 
           if [ -z "$FIELD_ID" ] || [ -z "$OPTION_ID" ]; then
-            echo "⚠️ Mapping incompleto — abortar"
-            exit 0
+            echo "❌ Não foi possível resolver IDs"
+            exit 1
           fi
 
           # -------------------------
           # ADICIONAR AO PROJECT
           # -------------------------
-          echo "➕ Adicionar ao project..."
-
           ITEM_ID=$(gh api graphql -f query='
             mutation($project:ID!, $content:ID!) {
               addProjectV2ItemById(input:{
@@ -132,13 +140,11 @@ jobs:
             -f content=$ISSUE_NODE_ID \
             --jq '.data.addProjectV2ItemById.item.id')
 
-          echo "🧩 ITEM_ID: $ITEM_ID"
+          echo "📦 ITEM_ID: $ITEM_ID"
 
           # -------------------------
-          # UPDATE FIELD
+          # ATUALIZAR FIELD
           # -------------------------
-          echo "✏️ Atualizar field..."
-
           gh api graphql -f query='
             mutation($project:ID!, $item:ID!, $field:ID!, $option: String!) {
               updateProjectV2ItemFieldValue(input:{
