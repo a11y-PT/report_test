@@ -14,48 +14,52 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Process issue labels → project fields
+      - name: Sync labels → project fields
         env:
-          GH_TOKEN: ${{ secrets.GH_PAT }} # ou GITHUB_TOKEN se funcionar
-          PROJECT_ID: PVT_xxx
+          GH_TOKEN: ${{ secrets.GH_PAT }}
 
           # -------------------------
-          # FIELD IDs
+          # PROJECT
           # -------------------------
-          FIELD_10WEB: PVTSSF_aaa
-          FIELD_CONTEUDO: PVTSSF_bbb
-          FIELD_TRANSACAO: PVTSSF_ccc
+          PROJECT_ID: ${{ vars.PROJECT_ID }}
 
           # -------------------------
-          # OPTION IDs (10 WEB)
+          # FIELDS
           # -------------------------
-          OPT_10WEB_1: opt_aaa
-          OPT_10WEB_2: opt_bbb
-          OPT_10WEB_3: opt_ccc
-          OPT_10WEB_4: opt_ddd
-          OPT_10WEB_5: opt_eee
-          OPT_10WEB_6: opt_fff
-          OPT_10WEB_7: opt_ggg
-          OPT_10WEB_8: opt_hhh
-          OPT_10WEB_9: opt_iii
-          OPT_10WEB_10: opt_jjj
+          FIELD_10WEB: ${{ vars.FIELD_10WEB }}
+          FIELD_CONTEUDO: ${{ vars.FIELD_CONTEUDO }}
+          FIELD_TRANSACAO: ${{ vars.FIELD_TRANSACAO }}
 
           # -------------------------
-          # OPTION IDs (CONTEÚDO)
+          # OPTIONS (10 WEB)
           # -------------------------
-          OPT_CONT_1: opt_111
-          OPT_CONT_2: opt_222
-          OPT_CONT_3: opt_333
-          OPT_CONT_4: opt_444
-          OPT_CONT_5: opt_555
+          OPT_10WEB_1: ${{ vars.OPT_10WEB_1 }}
+          OPT_10WEB_2: ${{ vars.OPT_10WEB_2 }}
+          OPT_10WEB_3: ${{ vars.OPT_10WEB_3 }}
+          OPT_10WEB_4: ${{ vars.OPT_10WEB_4 }}
+          OPT_10WEB_5: ${{ vars.OPT_10WEB_5 }}
+          OPT_10WEB_6: ${{ vars.OPT_10WEB_6 }}
+          OPT_10WEB_7: ${{ vars.OPT_10WEB_7 }}
+          OPT_10WEB_8: ${{ vars.OPT_10WEB_8 }}
+          OPT_10WEB_9: ${{ vars.OPT_10WEB_9 }}
+          OPT_10WEB_10: ${{ vars.OPT_10WEB_10 }}
 
           # -------------------------
-          # OPTION IDs (TRANSAÇÃO)
+          # OPTIONS (CONTEÚDO)
           # -------------------------
-          OPT_TRANS_1: opt_x1
-          OPT_TRANS_2: opt_x2
-          OPT_TRANS_3: opt_x3
-          OPT_TRANS_4: opt_x4
+          OPT_CONT_1: ${{ vars.OPT_CONT_1 }}
+          OPT_CONT_2: ${{ vars.OPT_CONT_2 }}
+          OPT_CONT_3: ${{ vars.OPT_CONT_3 }}
+          OPT_CONT_4: ${{ vars.OPT_CONT_4 }}
+          OPT_CONT_5: ${{ vars.OPT_CONT_5 }}
+
+          # -------------------------
+          # OPTIONS (TRANSAÇÃO)
+          # -------------------------
+          OPT_TRANS_1: ${{ vars.OPT_TRANS_1 }}
+          OPT_TRANS_2: ${{ vars.OPT_TRANS_2 }}
+          OPT_TRANS_3: ${{ vars.OPT_TRANS_3 }}
+          OPT_TRANS_4: ${{ vars.OPT_TRANS_4 }}
 
         run: |
           echo "🔍 A ler labels..."
@@ -65,12 +69,12 @@ jobs:
 
           echo "$LABELS"
 
-          # -------------------------
-          # DETETAR FIELD
-          # -------------------------
           FIELD_ID=""
           OPTION_ID=""
 
+          # -------------------------
+          # DETETAR FIELD
+          # -------------------------
           if echo "$LABELS" | grep -q "chk 10 web"; then
             FIELD_ID=$FIELD_10WEB
             PREFIX="OPT_10WEB_"
@@ -89,22 +93,18 @@ jobs:
           echo "📌 FIELD_ID: $FIELD_ID"
 
           # -------------------------
-          # EXTRAIR NÚMERO DO R X.Y
+          # EXTRAIR R
           # -------------------------
           R_NUMBER=$(echo "$LABELS" | grep -oE 'R [0-9]+' | head -n1 | cut -d' ' -f2)
 
           echo "🔢 R_NUMBER: $R_NUMBER"
 
           if [ -z "$R_NUMBER" ]; then
-            echo "⚠️ Sem label R X — abortar"
+            echo "⚠️ Sem label R — abortar"
             exit 0
           fi
 
-          # -------------------------
-          # RESOLVER OPTION DINAMICAMENTE
-          # -------------------------
           VAR_NAME="${PREFIX}${R_NUMBER}"
-
           OPTION_ID=$(printenv $VAR_NAME)
 
           echo "🎯 OPTION_ID: $OPTION_ID"
@@ -135,7 +135,7 @@ jobs:
           echo "🧩 ITEM_ID: $ITEM_ID"
 
           # -------------------------
-          # ATUALIZAR FIELD
+          # UPDATE FIELD
           # -------------------------
           echo "✏️ Atualizar field..."
 
