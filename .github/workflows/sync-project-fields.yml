@@ -29,14 +29,14 @@ jobs:
           ORG_NAME=$(jq -r '.repository.owner.login' "$GITHUB_EVENT_PATH")
 
           echo "Repo: $REPO_NAME"
-          echo "Org: $ORG_NAME"
           echo "Labels:"
           echo "$LABELS"
 
           # -------------------------
-          # DEBUG: LISTAR PROJECTS
+          # DESCOBRIR PROJECT
           # -------------------------
-          echo "📋 Projects disponíveis:"
+          echo "🔍 Procurar project..."
+
           PROJECTS_JSON=$(gh api graphql -f query='
           query($org: String!) {
             organization(login: $org) {
@@ -49,13 +49,6 @@ jobs:
             }
           }' -f org=$ORG_NAME)
 
-          echo "$PROJECTS_JSON" | jq -r '.data.organization.projectsV2.nodes[].title'
-
-          # -------------------------
-          # DESCOBRIR PROJECT
-          # -------------------------
-          echo "🔍 Procurar project..."
-
           PROJECT_ID=$(echo "$PROJECTS_JSON" | jq -r --arg name "$REPO_NAME" '
             .data.organization.projectsV2.nodes[]
             | select(.title | ascii_downcase | startswith($name | ascii_downcase))
@@ -65,7 +58,7 @@ jobs:
           echo "📌 PROJECT_ID: $PROJECT_ID"
 
           if [ -z "$PROJECT_ID" ]; then
-            echo "❌ Project não encontrado para prefixo: $REPO_NAME"
+            echo "❌ Project não encontrado"
             exit 1
           fi
 
@@ -74,24 +67,27 @@ jobs:
           # -------------------------
           CHECK_KEY=$(echo "$LABELS" | grep -Eo 'chk [^ ]+( [^ ]+)?' | head -n1)
 
-          echo "📌 CHECK_KEY: $CHECK_KEY"
-
           if [ -z "$CHECK_KEY" ]; then
             echo "⚠️ Sem checklist — abortar"
             exit 0
           fi
+
+          # normalizar (acentos + lowercase)
+          CHECK_KEY=$(echo "$CHECK_KEY" | iconv -f utf8 -t ascii//TRANSLIT | tr '[:upper:]' '[:lower:]')
+
+          echo "📌 CHECK_KEY: $CHECK_KEY"
 
           # -------------------------
           # EXTRAIR R
           # -------------------------
           R_NUMBER=$(echo "$LABELS" | grep -oE 'R [0-9]+' | head -n1 | cut -d' ' -f2)
 
-          echo "🔢 R_NUMBER: $R_NUMBER"
-
           if [ -z "$R_NUMBER" ]; then
             echo "⚠️ Sem label R — abortar"
             exit 0
           fi
+
+          echo "🔢 R_NUMBER: $R_NUMBER"
 
           # -------------------------
           # LER MAPPING
@@ -144,15 +140,17 @@ jobs:
           ')
 
           # -------------------------
-          # RESOLVER OPTION_ID
+          # RESOLVER OPTION_ID (robusto)
           # -------------------------
           OPTION_ID=$(echo "$FIELDS_JSON" | jq -r \
             --arg fname "$FIELD_NAME" \
             --arg oname "$OPTION_NAME" '
+            def norm: ascii_downcase | gsub("–"; "-");
+
             .data.node.fields.nodes[]
             | select(.name == $fname)
             | .options[]
-            | select(.name == $oname)
+            | select(norm(.name) == norm($oname))
             | .id
           ')
 
