@@ -23,7 +23,7 @@ jobs:
         run: |
           echo "🔍 A ler evento..."
 
-          LABELS=$(jq -r '.issue.labels[].name' "$GITHUB_EVENT_PATH")
+          LABELS=$(jq -r '.issue.labels[].name' "$GITHUB_EVENT_PATH" | sed 's/[[:space:]]*$//')
           ISSUE_NODE_ID=$(jq -r '.issue.node_id' "$GITHUB_EVENT_PATH")
           REPO_NAME=$(jq -r '.repository.name' "$GITHUB_EVENT_PATH")
           ORG_NAME=$(jq -r '.repository.owner.login' "$GITHUB_EVENT_PATH")
@@ -63,31 +63,43 @@ jobs:
           fi
 
           # -------------------------
-          # DETETAR CHECKLIST
+          # NORMALIZAR LABELS
           # -------------------------
-          CHECK_KEY=$(echo "$LABELS" | grep -Eo 'chk [^ ]+( [^ ]+)?' | head -n1)
+          NORMALIZED_LABELS=$(echo "$LABELS" | iconv -f utf8 -t ascii//TRANSLIT | tr '[:upper:]' '[:lower:]')
 
-          if [ -z "$CHECK_KEY" ]; then
-            echo "⚠️ Sem checklist — abortar"
-            exit 0
-          fi
+          echo "🔤 Labels normalizados:"
+          echo "$NORMALIZED_LABELS"
 
-          # normalizar (acentos + lowercase)
-          CHECK_KEY=$(echo "$CHECK_KEY" | iconv -f utf8 -t ascii//TRANSLIT | tr '[:upper:]' '[:lower:]')
+          # -------------------------
+          # DETETAR CHECK_KEY (via mapping)
+          # -------------------------
+          CHECK_KEY=""
+
+          for key in $(jq -r 'keys[]' .config/mapping.json); do
+            if echo "$NORMALIZED_LABELS" | grep -q "$key"; then
+              CHECK_KEY=$key
+              break
+            fi
+          done
 
           echo "📌 CHECK_KEY: $CHECK_KEY"
+
+          if [ -z "$CHECK_KEY" ]; then
+            echo "⚠️ Nenhuma checklist reconhecida — abortar"
+            exit 0
+          fi
 
           # -------------------------
           # EXTRAIR R
           # -------------------------
           R_NUMBER=$(echo "$LABELS" | grep -oE 'R [0-9]+' | head -n1 | cut -d' ' -f2)
 
+          echo "🔢 R_NUMBER: $R_NUMBER"
+
           if [ -z "$R_NUMBER" ]; then
             echo "⚠️ Sem label R — abortar"
             exit 0
           fi
-
-          echo "🔢 R_NUMBER: $R_NUMBER"
 
           # -------------------------
           # LER MAPPING
@@ -145,7 +157,7 @@ jobs:
           OPTION_ID=$(echo "$FIELDS_JSON" | jq -r \
             --arg fname "$FIELD_NAME" \
             --arg oname "$OPTION_NAME" '
-            def norm: ascii_downcase | gsub("–"; "-");
+            def norm(s): s | ascii_downcase | gsub("–"; "-");
 
             .data.node.fields.nodes[]
             | select(.name == $fname)
