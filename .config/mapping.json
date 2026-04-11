@@ -17,19 +17,19 @@
   "chk conteudo": {
     "field": "Aspetos Chk Conteúdo",
     "options": {
-      "1": "1 - Pesquisa",
+      "1": "1 - Clareza do conteúdo",
       "2": "2 - Usabilidade do conteúdo",
-      "3": "3 - Metainformação",
-      "4": "4 - Dados abertos",
-      "5": "5 - Redes sociais"
+      "3": "3 - Estrutura da navegação",
+      "4": "4 - Estrutura da informação",
+      "5": "5 - Elementos interativos"
     }
   },
   "chk transacao": {
     "field": "Aspetos Chk Transação",
     "options": {
-      "1": "1 - Identificação",
-      "2": "2 - Processo",
-      "3": "3 - Validação",
+      "1": "1 - Formulários",
+      "2": "2 - Campos",
+      "3": "3 - Resposta",
       "4": "4 - Erros"
     }
   }
