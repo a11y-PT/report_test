@@ -20,14 +20,54 @@ jobs:
       - name: Sync labels → project fields
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
-          PROJECT_ID: ${{ vars.PROJECT_ID }} # único valor que mantemos
         run: |
-          echo "🔍 A ler labels..."
+          echo "🔍 A ler evento..."
 
           LABELS=$(jq -r '.issue.labels[].name' "$GITHUB_EVENT_PATH")
           ISSUE_NODE_ID=$(jq -r '.issue.node_id' "$GITHUB_EVENT_PATH")
+          REPO_NAME=$(jq -r '.repository.name' "$GITHUB_EVENT_PATH")
+          ORG_NAME=$(jq -r '.repository.owner.login' "$GITHUB_EVENT_PATH")
 
+          echo "Repo: $REPO_NAME"
+          echo "Org: $ORG_NAME"
+          echo "Labels:"
           echo "$LABELS"
+
+          # -------------------------
+          # DEBUG: LISTAR PROJECTS
+          # -------------------------
+          echo "📋 Projects disponíveis:"
+          PROJECTS_JSON=$(gh api graphql -f query='
+          query($org: String!) {
+            organization(login: $org) {
+              projectsV2(first: 50) {
+                nodes {
+                  id
+                  title
+                }
+              }
+            }
+          }' -f org=$ORG_NAME)
+
+          echo "$PROJECTS_JSON" | jq -r '.data.organization.projectsV2.nodes[].title'
+
+          # -------------------------
+          # DESCOBRIR PROJECT
+          # -------------------------
+          echo "🔍 Procurar project..."
+
+          PROJECT_ID=$(echo "$PROJECTS_JSON" | jq -r --arg name "$REPO_NAME" '
+            .data.organization.projectsV2.nodes[]
+            | select(.title | ascii_downcase | startswith($name | ascii_downcase))
+            | .id
+          ' | head -n1)
+
+          echo "📌 PROJECT_ID: $PROJECT_ID"
+
+          if [ -z "$PROJECT_ID" ]; then
+            echo "❌ Project não encontrado para prefixo: $REPO_NAME"
+            exit 1
+          fi
 
           # -------------------------
           # DETETAR CHECKLIST
@@ -127,6 +167,8 @@ jobs:
           # -------------------------
           # ADICIONAR AO PROJECT
           # -------------------------
+          echo "➕ Adicionar ao project..."
+
           ITEM_ID=$(gh api graphql -f query='
             mutation($project:ID!, $content:ID!) {
               addProjectV2ItemById(input:{
@@ -145,6 +187,8 @@ jobs:
           # -------------------------
           # ATUALIZAR FIELD
           # -------------------------
+          echo "✏️ Atualizar field..."
+
           gh api graphql -f query='
             mutation($project:ID!, $item:ID!, $field:ID!, $option: String!) {
               updateProjectV2ItemFieldValue(input:{
