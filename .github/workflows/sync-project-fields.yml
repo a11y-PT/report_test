@@ -71,16 +71,16 @@ jobs:
           echo "$NORMALIZED_LABELS"
 
           # -------------------------
-          # DETETAR CHECK_KEY (via mapping)
+          # DETETAR CHECK_KEY (FIX)
           # -------------------------
           CHECK_KEY=""
 
-          for key in $(jq -r 'keys[]' .config/mapping.json); do
-            if echo "$NORMALIZED_LABELS" | grep -q "$key"; then
+          while IFS= read -r key; do
+            if echo "$NORMALIZED_LABELS" | grep -qw "$key"; then
               CHECK_KEY=$key
               break
             fi
-          done
+          done < <(jq -r 'keys[]' .config/mapping.json)
 
           echo "📌 CHECK_KEY: $CHECK_KEY"
 
@@ -152,7 +152,7 @@ jobs:
           ')
 
           # -------------------------
-          # RESOLVER OPTION_ID (robusto)
+          # RESOLVER OPTION_ID (FIX jq)
           # -------------------------
           OPTION_ID=$(echo "$FIELDS_JSON" | jq -r \
             --arg fname "$FIELD_NAME" \
