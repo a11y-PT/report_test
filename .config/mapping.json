@@ -14,7 +14,7 @@
       "10": "10 - PDF"
     }
   },
-  "chk conteúdo": {
+  "chk conteudo": {
     "field": "Aspetos Chk Conteúdo",
     "options": {
       "1": "1 - Pesquisa",
@@ -24,7 +24,7 @@
       "5": "5 - Redes sociais"
     }
   },
-  "chk transação": {
+  "chk transacao": {
     "field": "Aspetos Chk Transação",
     "options": {
       "1": "1 - Identificação",
